@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 with lib;
 
@@ -6,7 +11,7 @@ let
 
   cfg = config.virtualisation.docker.rootless;
   proxy_env = config.networking.proxy.envVars;
-  settingsFormat = pkgs.formats.json {};
+  settingsFormat = pkgs.formats.json { };
   daemonSettingsFile = settingsFormat.generate "daemon.json" cfg.daemon.settings;
 
 in
@@ -22,6 +27,26 @@ in
         This option enables docker in a rootless mode, a daemon that manages
         linux containers. To interact with the daemon, one needs to set
         {command}`DOCKER_HOST=unix://$XDG_RUNTIME_DIR/docker.sock`.
+      '';
+    };
+
+    listenOptions = mkOption {
+      type = types.listOf types.str;
+      default = [ "%t/docker.sock" ];
+      description = ''
+        A list of unix and tcp sockets docker should listen to. The format follows
+        ListenStream as described in systemd.socket(5).
+      '';
+    };
+
+    enableOnBoot = mkOption {
+      type = types.bool;
+      default = true;
+      description = ''
+        When enabled, dockerd-rootless is started on boot. This is required for
+        containers which are created with the
+        `--restart=always` flag to work. If this option is
+        disabled, docker might be started on demand by socket activation.
       '';
     };
 
@@ -47,6 +72,101 @@ in
       '';
     };
 
+    liveRestore = mkOption {
+      type = types.bool;
+      default = true;
+      description = ''
+        Allow dockerd to be restarted without affecting running container.
+        This option is incompatible with docker swarm.
+      '';
+    };
+
+    storageDriver = mkOption {
+      type = types.nullOr (
+        types.enum [
+          "overlay2"
+          "fuse-overlayfs"
+          "btrfs"
+          "vfs"
+        ]
+      );
+      default = null;
+      description = ''
+        This option determines which Docker
+        [storage driver](https://docs.docker.com/engine/security/rootless/#known-limitations/)
+        to use.
+        By default it lets docker automatically choose the preferred storage
+        driver.
+        However, it is recommended to specify a storage driver explicitly, as
+        docker's default varies over versions.
+
+        ::: {.warning}
+        Changing the storage driver will cause any existing containers
+        and images to become inaccessible.
+        :::
+      '';
+    };
+
+    logDriver = mkOption {
+      type = types.enum [
+        "none"
+        "json-file"
+        "syslog"
+        "journald"
+        "gelf"
+        "fluentd"
+        "awslogs"
+        "splunk"
+        "etwlogs"
+        "gcplogs"
+        "local"
+      ];
+      default = "journald";
+      description = ''
+        This option determines which Docker log driver to use.
+      '';
+    };
+
+    extraOptions = mkOption {
+      type = types.separatedString " ";
+      default = "";
+      description = ''
+        The extra command-line options to pass to
+        {command}`docker` daemon.
+      '';
+    };
+
+    autoPrune = {
+      enable = mkOption {
+        type = types.bool;
+        default = false;
+        description = ''
+          Whether to periodically prune Docker resources. If enabled, a
+          systemd timer will run `docker system prune -f`
+          as specified by the `dates` option.
+        '';
+      };
+
+      flags = mkOption {
+        type = types.listOf types.str;
+        default = [ ];
+        example = [ "--all" ];
+        description = ''
+          Any additional flags passed to {command}`docker system prune`.
+        '';
+      };
+
+      dates = mkOption {
+        default = "weekly";
+        type = types.str;
+        description = ''
+          Specification (in the format described by
+          {manpage}`systemd.time(7)`) of the time at
+          which the prune will occur.
+        '';
+      };
+    };
+
     package = mkPackageOption pkgs "docker" { };
   };
 
@@ -63,7 +183,11 @@ in
 
     # Taken from https://github.com/moby/moby/blob/master/contrib/dockerd-rootless-setuptool.sh
     systemd.user.services.docker = {
-      wantedBy = [ "default.target" ];
+      wantedBy = optional cfg.enableOnBoot [ "default.target" ];
+      after = [
+        "network.target"
+        "docker.socket"
+      ];
       description = "Docker Application Container Engine (Rootless)";
       # needs newuidmap from pkgs.shadow
       path = [ "/run/wrappers" ];
@@ -88,6 +212,39 @@ in
         NotifyAccess = "all";
         KillMode = "mixed";
       };
+    };
+
+    systemd.user.sockets.docker = {
+      description = "Docker Socket for the API";
+      wantedBy = [ "sockets.target" ];
+      socketConfig = {
+        ListenStream = cfg.listenOptions;
+        SocketMode = "0660";
+      };
+      after = [ "network.target" ];
+    };
+
+    systemd.user.services.docker-prune = {
+      description = "Prune docker resources";
+
+      restartIfChanged = false;
+      unitConfig.X-StopOnRemoval = false;
+
+      serviceConfig.Type = "oneshot";
+
+      script = ''
+        ${cfg.package}/bin/docker system prune -f ${toString cfg.autoPrune.flags}
+      '';
+
+      startAt = optional cfg.autoPrune.enable cfg.autoPrune.dates;
+      after = [ "docker.service" ];
+      requires = [ "docker.service" ];
+    };
+
+    virtualisation.docker.rootless.daemon.settings = {
+      log-driver = mkDefault cfg.logDriver;
+      storage-driver = mkIf (cfg.storageDriver != null) (mkDefault cfg.storageDriver);
+      live-restore = mkDefault cfg.liveRestore;
     };
   };
 

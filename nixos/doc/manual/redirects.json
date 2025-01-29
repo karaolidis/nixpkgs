@@ -1415,9 +1415,6 @@
   "sec-profile-qemu-guest": [
     "index.html#sec-profile-qemu-guest"
   ],
-  "sec-kubernetes": [
-    "index.html#sec-kubernetes"
-  ],
   "ch-running": [
     "index.html#ch-running"
   ],

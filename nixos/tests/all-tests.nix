@@ -528,7 +528,6 @@ in {
   krb5 = discoverTests (import ./krb5);
   ksm = handleTest ./ksm.nix {};
   kthxbye = handleTest ./kthxbye.nix {};
-  kubernetes = handleTestOn ["x86_64-linux"] ./kubernetes {};
   kubo = import ./kubo { inherit recurseIntoAttrs runTest; };
   ladybird = handleTest ./ladybird.nix {};
   languagetool = handleTest ./languagetool.nix {};

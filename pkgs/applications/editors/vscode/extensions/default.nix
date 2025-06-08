@@ -3260,17 +3260,17 @@ let
 
       ms-azuretools.vscode-bicep = callPackage ./ms-azuretools.vscode-bicep { };
 
-      ms-azuretools.vscode-docker = buildVscodeMarketplaceExtension {
+      ms-azuretools.vscode-containers = buildVscodeMarketplaceExtension {
         mktplcRef = {
           publisher = "ms-azuretools";
-          name = "vscode-docker";
-          version = "2.0.0";
-          hash = "sha256-Yxysekp9nC91g7M5oXppOF+Rf4Jf/PD+X3inmdVfVmo=";
+          name = "vscode-containers";
+          version = "2.0.3";
+          hash = "sha256-MAeE99XmjIjYbr72UymnkrDKsNRSjNiB1jdffKTosHQ=";
         };
         meta = {
-          description = "Docker Extension for Visual Studio Code";
-          homepage = "https://github.com/microsoft/vscode-docker";
-          changelog = "https://marketplace.visualstudio.com/items/ms-azuretools.vscode-docker/changelog";
+          description = "Container Tools for Visual Studio Code";
+          homepage = "https://github.com/microsoft/vscode-containers";
+          changelog = "https://marketplace.visualstudio.com/items/ms-azuretools.vscode-containers/changelog";
           license = lib.licenses.mit;
         };
       };
